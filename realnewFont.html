@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Secret Font</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #000000; color: white; }
+    label { display: block; margin-top: 10px; }
+    canvas { border: 1px solid #ccc; margin-top: 20px; background: white; }
+    input[type=range] { width: 300px; accent-color: lemonchiffon; }
+    #status { margin-top: 10px; font-style: italic; color: lemonchiffon; }
+
+    #glyphGrid {
+      margin-top: 40px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 10px;
+      background: #111;
+      padding: 10px;
+      border: 1px solid #444;
+    }
+
+    .glyph-cell {
+      text-align: center;
+      color: lemonchiffon;
+      font-size: 18px;
+    }
+
+    .glyph-cell img {
+      width: 64px;
+      height: auto;
+      display: block;
+      margin: 4px auto;
+      background: white;
+      border: 1px solid #777;
+    }
+  </style>
+</head>
+<body>
+  <h1>Secret Font</h1>
+
+  <label>Main Character:
+    <input type="text" id="bigText" value="A">
+  </label>
+
+  <label>Sub Text:
+    <input type="text" id="fillText" value="lorem ipsum dolor sit amet consectetur adipiscing elit">
+  </label>
+
+  <label>Main Character Size: <span id="bigSizeVal">180</span>px
+    <input type="range" id="bigSize" min="50" max="600" value="180">
+  </label>
+
+  <label>Sub Text Size: <span id="smallSizeVal">7</span>px
+    <input type="range" id="smallSize" min="2" max="40" value="7">
+  </label>
+
+  <label>Spacing: <span id="spacingVal">3</span>px
+    <input type="range" id="spacing" min="1" max="25" value="3">
+  </label>
+
+  <label>Rotation: <span id="rotationVal">0</span>°
+    <input type="range" id="rotation" min="-180" max="180" value="0">
+  </label>
+
+  <br>
+  <button onclick="saveImage()">Download PNG</button>
+  <button onclick="downloadBitmapFont()">Download Bitmap Font</button>
+  <div id="status">Ready to save your character as an image.</div>
+
+  <canvas id="canvas" width="800" height="400"></canvas>
+
+  <!-- Glyph preview grid -->
+  <div id="glyphGrid"></div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const statusDiv = document.getElementById('status');
+    const glyphGrid = document.getElementById('glyphGrid');
+    const glyphs = []; // Stores { char, image }
+
+    const inputs = {
+      bigText: document.getElementById('bigText'),
+      fillText: document.getElementById('fillText'),
+      bigSize: document.getElementById('bigSize'),
+      smallSize: document.getElementById('smallSize'),
+      spacing: document.getElementById('spacing'),
+      rotation: document.getElementById('rotation'),
+    };
+
+    const valDisplays = {
+      bigSize: document.getElementById('bigSizeVal'),
+      smallSize: document.getElementById('smallSizeVal'),
+      spacing: document.getElementById('spacingVal'),
+      rotation: document.getElementById('rotationVal'),
+    };
+
+    Object.values(inputs).forEach(input => input.addEventListener('input', draw));
+
+    function draw() {
+      const bigText = inputs.bigText.value || 'A';
+      const fillWords = inputs.fillText.value.split(' ');
+      const bigSize = parseInt(inputs.bigSize.value);
+      const smallSize = parseInt(inputs.smallSize.value);
+      const spacing = parseInt(inputs.spacing.value);
+      const rotation = parseFloat(inputs.rotation.value);
+
+      valDisplays.bigSize.textContent = bigSize;
+      valDisplays.smallSize.textContent = smallSize;
+      valDisplays.spacing.textContent = spacing;
+      valDisplays.rotation.textContent = rotation;
+
+      canvas.width = 800;
+      canvas.height = 400;
+
+      const off = document.createElement('canvas');
+      off.width = canvas.width;
+      off.height = canvas.height;
+      const offCtx = off.getContext('2d');
+      offCtx.fillStyle = 'black';
+      offCtx.font = `${bigSize}px sans-serif`;
+      const textWidth = offCtx.measureText(bigText).width;
+      offCtx.fillText(bigText, (canvas.width - textWidth) / 2, canvas.height / 2 + bigSize / 3);
+
+      const imgData = offCtx.getImageData(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'black';
+      ctx.font = `${smallSize}px sans-serif`;
+
+      let wordIndex = 0;
+      for (let x = 0; x < canvas.width; x += spacing) {
+        for (let y = 0; y < canvas.height; y += spacing) {
+          const idx = (y * canvas.width + x) * 4;
+          const alpha = imgData.data[idx + 3];
+          if (alpha > 128) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(rotation * Math.PI / 180);
+            ctx.fillText(fillWords[wordIndex % fillWords.length], 0, 0);
+            ctx.restore();
+            wordIndex++;
+          }
+        }
+      }
+    }
+
+    function saveImage() {
+      const char = inputs.bigText.value.charAt(0) || 'A';
+      const dataURL = canvas.toDataURL();
+
+      glyphs.push({ char, image: dataURL });
+
+      const link = document.createElement('a');
+      link.download = `glyph_${char}.png`;
+      link.href = dataURL;
+      link.click();
+
+      const cell = document.createElement('div');
+      cell.className = 'glyph-cell';
+      cell.innerHTML = `<div>${char}</div><img src="${dataURL}" alt="${char}">`;
+      glyphGrid.appendChild(cell);
+
+      statusDiv.textContent = `✅ PNG image for "${char}" downloaded and added to preview grid.`;
+    }
+
+    function downloadBitmapFont() {
+      if (glyphs.length === 0) {
+        alert("No glyphs saved.");
+        return;
+      }
+
+      const glyphSize = 128;
+      const cols = Math.ceil(Math.sqrt(glyphs.length));
+      const rows = Math.ceil(glyphs.length / cols);
+      const sheet = document.createElement('canvas');
+      sheet.width = cols * glyphSize;
+      sheet.height = rows * glyphSize;
+      const sheetCtx = sheet.getContext('2d');
+
+      let xml = `<?xml version="1.0"?>\n<font>\n  <info face="SecretFont" size="${glyphSize}" />\n  <common lineHeight="${glyphSize}" />\n  <pages><page id="0" file="bitmap-font.png"/></pages>\n  <chars count="${glyphs.length}">\n`;
+
+      let promises = glyphs.map((glyph, i) => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const x = (i % cols) * glyphSize;
+            const y = Math.floor(i / cols) * glyphSize;
+            sheetCtx.drawImage(img, x, y, glyphSize, glyphSize);
+            const charCode = glyph.char.charCodeAt(0);
+            xml += `    <char id="${charCode}" x="${x}" y="${y}" width="${glyphSize}" height="${glyphSize}" xoffset="0" yoffset="0" xadvance="${glyphSize}" page="0" chnl="0" />\n`;
+            resolve();
+          };
+          img.src = glyph.image;
+        });
+      });
+
+      Promise.all(promises).then(() => {
+        xml += `  </chars>\n</font>`;
+
+        // Download sprite sheet
+        const spriteLink = document.createElement('a');
+        spriteLink.download = 'bitmap-font.png';
+        spriteLink.href = sheet.toDataURL();
+        spriteLink.click();
+
+        // Download font descriptor
+        const blob = new Blob([xml], { type: 'text/xml' });
+        const fontLink = document.createElement('a');
+        fontLink.download = 'bitmap-font.fnt';
+        fontLink.href = URL.createObjectURL(blob);
+        fontLink.click();
+
+        statusDiv.textContent = `✅ Bitmap font and XML descriptor downloaded.`;
+      });
+    }
+
+    draw();
+  </script>
+</body>
+</html>
